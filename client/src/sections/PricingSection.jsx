@@ -1,24 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Check, ArrowRight, Sparkles, ShieldCheck } from 'lucide-react';
 import { siteConfig } from '../config/siteConfig';
+import CheckoutModal from '../components/checkout/CheckoutModal';
 
 export const PricingSection = () => {
   const { pricing } = siteConfig;
+  const [selectedPlanForCheckout, setSelectedPlanForCheckout] = useState(null);
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
 
-  const handleSelectPlan = (planName) => {
-    const serviceSelect = document.getElementById('service-select');
-    if (serviceSelect) {
-      serviceSelect.value = `Bookkeeping & Financial Advisory (${planName} Plan)`;
-    }
-    const messageInput = document.getElementById('message-input');
-    if (messageInput && !messageInput.value) {
-      messageInput.value = `Hello, I would like to get started with the ${planName} Plan for our business bookkeeping and tax filing.`;
-    }
-    const el = document.getElementById('contact');
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth' });
-    }
+  const handleOpenCheckout = (plan) => {
+    setSelectedPlanForCheckout(plan);
+    setIsCheckoutOpen(true);
   };
 
   return (
@@ -135,7 +128,7 @@ export const PricingSection = () => {
                 {/* Plan CTA Button */}
                 <div>
                   <button
-                    onClick={() => handleSelectPlan(plan.name)}
+                    onClick={() => handleOpenCheckout(plan)}
                     className={`w-full py-3.5 px-6 rounded-xl font-bold text-sm transition-all duration-200 flex items-center justify-center gap-2 ${
                       isPopular
                         ? 'bg-americanRed hover:bg-americanRed-hover text-white shadow-cta transform hover:-translate-y-0.5'
@@ -156,6 +149,13 @@ export const PricingSection = () => {
           })}
         </div>
       </div>
+
+      {/* Cashfree Checkout Modal */}
+      <CheckoutModal
+        isOpen={isCheckoutOpen}
+        onClose={() => setIsCheckoutOpen(false)}
+        selectedPlan={selectedPlanForCheckout}
+      />
     </section>
   );
 };

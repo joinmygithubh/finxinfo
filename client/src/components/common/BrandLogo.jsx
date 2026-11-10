@@ -5,16 +5,13 @@ import finxLogo from '../../assets/images/finx-logo.png';
 /**
  * Reusable BrandLogo Component
  *
- * Official FinXinfo brand logo with optional brand text:
- * - Desktop logo: 55px height (lg:h-[55px])
- * - Tablet logo: 48px height (md:h-[48px])
- * - Mobile logo: 38–42px height (h-[38px] sm:h-[42px])
- * - "Fin" in Navy Blue (#0A2342)
- * - "X" in American Red (#C62835)
- * - "info" in Navy Blue (#0A2342)
- * - 10–12px spacing between logo and text (gap-[10px] sm:gap-[12px])
- * - Vertically centered flexbox alignment (align-items: center)
- * - Entire combination is clickable and navigates to homepage
+ * Fully clickable FinXinfo brand logo + name lockup:
+ * - Navigates to homepage ('/') using React Router DOM Link without page reload
+ * - Flexbox alignment: display: flex; align-items: center; cursor: pointer; text-decoration: none
+ * - Accessible keyboard focus and hover states
+ * - Responsive logo heights: Desktop 55px, Tablet 48px, Mobile 38–42px
+ * - Responsive typography: "Fin" (#0A2342) + "X" (#C62835) + "info" (#0A2342)
+ * - 10–12px spacing between logo and text
  */
 export const BrandLogo = ({
   variant = 'dark', // 'dark' (on light backgrounds) | 'light' (on dark navy background)
@@ -23,18 +20,30 @@ export const BrandLogo = ({
   imgClassName = '',
   textClassName = '',
   to = '/',
+  onClick,
 }) => {
   const isDarkBackground = variant === 'light';
+
+  const handleClick = (e) => {
+    if (onClick) {
+      onClick(e);
+    }
+    // If user is already on homepage, smoothly scroll to the top
+    if (window.location.pathname === '/' && !to.includes('#')) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   return (
     <Link
       to={to}
-      className={`inline-flex items-center gap-[10px] sm:gap-[12px] group transition-opacity duration-200 hover:opacity-95 ${className}`}
+      onClick={handleClick}
+      className={`brand-logo flex items-center gap-[10px] sm:gap-[12px] cursor-pointer no-underline select-none transition-all duration-200 hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-americanRed focus-visible:ring-offset-2 rounded-lg ${className}`}
       aria-label="FinXinfo Homepage"
     >
-      {/* Logo Graphic */}
+      {/* Logo Image */}
       <div
-        className={`flex-shrink-0 flex items-center justify-center transition-transform duration-200 group-hover:scale-[1.02] active:scale-[0.98] ${
+        className={`flex-shrink-0 flex items-center justify-center transition-transform duration-200 hover:scale-[1.02] ${
           isDarkBackground
             ? 'bg-white rounded-full p-1 shadow-md border border-white/20'
             : ''
@@ -49,10 +58,10 @@ export const BrandLogo = ({
         />
       </div>
 
-      {/* Brand Text: Fin (Navy) + X (American Red) + info (Navy) */}
+      {/* Brand Name Text: Fin (#0A2342) + X (#C62835) + info (#0A2342) */}
       {showText && (
         <span
-          className={`font-heading font-extrabold tracking-tight leading-none text-[20px] sm:text-[22px] md:text-[24px] lg:text-[26px] select-none transition-transform duration-200 group-hover:translate-x-0.5 ${textClassName}`}
+          className={`font-heading font-extrabold tracking-tight leading-none text-[20px] sm:text-[22px] md:text-[24px] lg:text-[26px] ${textClassName}`}
         >
           <span className={isDarkBackground ? 'text-white' : 'text-[#0A2342]'}>Fin</span>
           <span className="text-[#C62835]">X</span>

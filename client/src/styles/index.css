@@ -27,6 +27,14 @@
   }
 }
 
+/* Brand Logo styles */
+.brand-logo {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  text-decoration: none;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;

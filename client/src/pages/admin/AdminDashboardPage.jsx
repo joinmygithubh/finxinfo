@@ -22,6 +22,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Send,
+  CreditCard,
+  Eye,
+  DollarSign,
+  Receipt,
 } from 'lucide-react';
 import BrandLogo from '../../components/common/BrandLogo';
 import api from '../../services/api';
@@ -34,15 +38,32 @@ const statusColors = {
   archived: 'bg-slate-100 text-slate-800 border-slate-200',
 };
 
+const paymentStatusColors = {
+  PAID: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+  PENDING: 'bg-amber-100 text-amber-800 border-amber-200',
+  FAILED: 'bg-red-100 text-red-800 border-red-200',
+  USER_DROPPED: 'bg-slate-100 text-slate-700 border-slate-200',
+  EXPIRED: 'bg-slate-100 text-slate-700 border-slate-200',
+};
+
 export const AdminDashboardPage = () => {
   const { admin, logout } = useAuth();
 
-  const [activeTab, setActiveTab] = useState('inquiries'); // 'inquiries' | 'subscribers'
+  const [activeTab, setActiveTab] = useState('inquiries'); // 'inquiries' | 'subscribers' | 'payments'
   const [stats, setStats] = useState(null);
   const [inquiries, setInquiries] = useState([]);
   const [subscribers, setSubscribers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Payments State
+  const [payments, setPayments] = useState([]);
+  const [paymentsLoading, setPaymentsLoading] = useState(false);
+  const [paymentSearch, setPaymentSearch] = useState('');
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState('all');
+  const [paymentPage, setPaymentPage] = useState(1);
+  const [paymentTotalPages, setPaymentTotalPages] = useState(1);
+  const [selectedPayment, setSelectedPayment] = useState(null);
 
   // Filters & Pagination
   const [search, setSearch] = useState('');
@@ -105,20 +126,50 @@ export const AdminDashboardPage = () => {
     }
   }, []);
 
+  // Fetch Payments
+  const fetchPayments = useCallback(async () => {
+    setPaymentsLoading(true);
+    try {
+      const res = await api.get('/admin/payments', {
+        params: {
+          search: paymentSearch,
+          status: paymentStatusFilter,
+          page: paymentPage,
+          limit: 10,
+        },
+      });
+      if (res.data.success) {
+        setPayments(res.data.data);
+        setPaymentTotalPages(res.data.pagination?.totalPages || 1);
+      }
+    } catch (err) {
+      console.error('Error fetching payments:', err);
+    } finally {
+      setPaymentsLoading(false);
+    }
+  }, [paymentSearch, paymentStatusFilter, paymentPage]);
+
   const refreshAll = async () => {
     setRefreshing(true);
-    await Promise.all([fetchStats(), fetchInquiries(), fetchSubscribers()]);
+    await Promise.all([fetchStats(), fetchInquiries(), fetchSubscribers(), fetchPayments()]);
     setRefreshing(false);
   };
 
   useEffect(() => {
     fetchStats();
     fetchSubscribers();
-  }, [fetchStats, fetchSubscribers]);
+    fetchPayments();
+  }, [fetchStats, fetchSubscribers, fetchPayments]);
 
   useEffect(() => {
     fetchInquiries();
   }, [fetchInquiries]);
+
+  useEffect(() => {
+    if (activeTab === 'payments') {
+      fetchPayments();
+    }
+  }, [fetchPayments, activeTab]);
 
   // Open Details Modal
   const openInquiryModal = (inq) => {
@@ -295,6 +346,18 @@ export const AdminDashboardPage = () => {
           >
             <Mail className="w-4 h-4" />
             <span>Newsletter Subscribers ({stats?.totalSubscribers || 0})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('payments')}
+            className={`pb-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${
+              activeTab === 'payments'
+                ? 'border-navy-900 text-navy-900'
+                : 'border-transparent text-mutedText hover:text-darkText'
+            }`}
+          >
+            <CreditCard className="w-4 h-4" />
+            <span>Cashfree Payments ({stats?.payments?.totalPayments || 0})</span>
           </button>
         </div>
 
@@ -523,6 +586,225 @@ export const AdminDashboardPage = () => {
             </div>
           </div>
         )}
+
+        {/* TAB 3: Cashfree Payments Table */}
+        {activeTab === 'payments' && (
+          <div className="space-y-6">
+            {/* Payment Summary Metrics Bar */}
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+              <div className="bg-white p-4 rounded-xl border border-appBorder shadow-sm">
+                <span className="text-xs text-mutedText block">Total Revenue</span>
+                <span className="text-xl sm:text-2xl font-extrabold text-navy-900 font-heading block mt-1">
+                  ₹{(stats?.payments?.totalRevenue || 0).toLocaleString()}
+                </span>
+                <span className="text-[10px] text-emerald-600 font-semibold">Verified Settled</span>
+              </div>
+
+              <div className="bg-white p-4 rounded-xl border border-appBorder shadow-sm">
+                <span className="text-xs text-mutedText block">Total Orders</span>
+                <span className="text-xl sm:text-2xl font-extrabold text-navy-900 font-heading block mt-1">
+                  {stats?.payments?.totalPayments || 0}
+                </span>
+                <span className="text-[10px] text-slate-500">All registered intents</span>
+              </div>
+
+              <div className="bg-white p-4 rounded-xl border border-emerald-200 bg-emerald-50/20 shadow-sm">
+                <span className="text-xs text-emerald-700 font-semibold block">Paid / Success</span>
+                <span className="text-xl sm:text-2xl font-extrabold text-emerald-700 font-heading block mt-1">
+                  {stats?.payments?.paidCount || 0}
+                </span>
+                <span className="text-[10px] text-emerald-600 font-semibold">Authorized transactions</span>
+              </div>
+
+              <div className="bg-white p-4 rounded-xl border border-amber-200 bg-amber-50/20 shadow-sm">
+                <span className="text-xs text-amber-700 font-semibold block">Pending Sync</span>
+                <span className="text-xl sm:text-2xl font-extrabold text-amber-700 font-heading block mt-1">
+                  {stats?.payments?.pendingCount || 0}
+                </span>
+                <span className="text-[10px] text-amber-600">Awaiting confirmation</span>
+              </div>
+
+              <div className="col-span-2 lg:col-span-1 bg-white p-4 rounded-xl border border-red-200 bg-red-50/20 shadow-sm">
+                <span className="text-xs text-red-700 font-semibold block">Failed / Abandoned</span>
+                <span className="text-xl sm:text-2xl font-extrabold text-red-700 font-heading block mt-1">
+                  {stats?.payments?.failedCount || 0}
+                </span>
+                <span className="text-[10px] text-red-600">Declined or closed</span>
+              </div>
+            </div>
+
+            {/* Search and Filters Bar */}
+            <div className="bg-white p-4 rounded-2xl border border-appBorder shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
+              {/* Search input */}
+              <div className="relative w-full md:w-96">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search Order ID, name, email, phone, Cashfree ID..."
+                  value={paymentSearch}
+                  onChange={(e) => {
+                    setPaymentSearch(e.target.value);
+                    setPaymentPage(1);
+                  }}
+                  className="w-full pl-9 pr-4 py-2 rounded-xl border border-appBorder text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-navy-900"
+                />
+              </div>
+
+              {/* Status filter */}
+              <div className="flex items-center gap-2 w-full md:w-auto">
+                <Filter className="w-4 h-4 text-slate-500" />
+                <select
+                  value={paymentStatusFilter}
+                  onChange={(e) => {
+                    setPaymentStatusFilter(e.target.value);
+                    setPaymentPage(1);
+                  }}
+                  className="px-3 py-2 rounded-xl border border-appBorder bg-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-navy-900 font-medium"
+                >
+                  <option value="all">All Payment Statuses</option>
+                  <option value="PAID">PAID (Successful)</option>
+                  <option value="PENDING">PENDING</option>
+                  <option value="FAILED">FAILED</option>
+                  <option value="USER_DROPPED">USER_DROPPED</option>
+                  <option value="EXPIRED">EXPIRED</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Payments Table */}
+            <div className="bg-white rounded-2xl border border-appBorder shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-slate-50 border-b border-appBorder text-slate-600 uppercase text-[11px] font-bold tracking-wider">
+                    <tr>
+                      <th className="py-3 px-4">Order ID</th>
+                      <th className="py-3 px-4">Customer Details</th>
+                      <th className="py-3 px-4">Plan / Service</th>
+                      <th className="py-3 px-4">Amount</th>
+                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4">Date &amp; Time</th>
+                      <th className="py-3 px-4 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-appBorder">
+                    {paymentsLoading ? (
+                      <tr>
+                        <td colSpan={7} className="py-12 text-center text-slate-500 text-xs">
+                          <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-navy-900" />
+                          Loading Cashfree transactions...
+                        </td>
+                      </tr>
+                    ) : payments.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="py-12 text-center text-slate-400 text-xs">
+                          No payment orders matching criteria found.
+                        </td>
+                      </tr>
+                    ) : (
+                      payments.map((p) => {
+                        const statusBadge =
+                          paymentStatusColors[p.paymentStatus] || 'bg-slate-100 text-slate-800 border-slate-200';
+
+                        return (
+                          <tr key={p._id} className="hover:bg-slate-50 transition-colors">
+                            <td className="py-3.5 px-4">
+                              <span className="font-mono text-xs font-bold text-navy-900 block">
+                                {p.orderId}
+                              </span>
+                              {p.cashfreePaymentId && (
+                                <span className="font-mono text-[10px] text-slate-400 block mt-0.5">
+                                  CF: {p.cashfreePaymentId}
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="py-3.5 px-4">
+                              <div className="font-semibold text-navy-900 text-xs sm:text-sm">
+                                {p.customerName}
+                              </div>
+                              <div className="text-[11px] text-slate-500">{p.customerEmail}</div>
+                              <div className="text-[11px] text-slate-400">{p.customerPhone}</div>
+                            </td>
+
+                            <td className="py-3.5 px-4">
+                              <span className="font-medium text-xs text-darkText block">
+                                {p.serviceName}
+                              </span>
+                              {p.paymentMethod && (
+                                <span className="text-[10px] text-slate-400 uppercase">
+                                  {p.paymentMethod}
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="py-3.5 px-4">
+                              <span className="font-extrabold text-navy-900 text-sm font-heading">
+                                {p.currency} {p.amount?.toFixed?.(2) || p.amount}
+                              </span>
+                            </td>
+
+                            <td className="py-3.5 px-4">
+                              <span
+                                className={`px-2.5 py-1 rounded-full text-[10px] font-bold border uppercase inline-block ${statusBadge}`}
+                              >
+                                {p.paymentStatus}
+                              </span>
+                            </td>
+
+                            <td className="py-3.5 px-4 text-xs text-slate-500">
+                              {new Date(p.createdAt).toLocaleString()}
+                            </td>
+
+                            <td className="py-3.5 px-4 text-right">
+                              <button
+                                onClick={() => setSelectedPayment(p)}
+                                className="p-1.5 rounded-lg text-navy-900 hover:bg-navy-50 transition-colors inline-flex items-center gap-1 text-xs font-semibold"
+                                title="View Details"
+                              >
+                                <Eye className="w-4 h-4" />
+                                <span>Details</span>
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination Controls */}
+              {paymentTotalPages > 1 && (
+                <div className="p-4 border-t border-appBorder flex items-center justify-between">
+                  <div className="text-xs text-slate-500">
+                    Page <span className="font-bold text-navy-900">{paymentPage}</span> of{' '}
+                    <span className="font-bold text-navy-900">{paymentTotalPages}</span>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      disabled={paymentPage <= 1 || paymentsLoading}
+                      onClick={() => setPaymentPage((prev) => Math.max(1, prev - 1))}
+                      className="px-3 py-1.5 rounded-lg border border-appBorder text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5 inline mr-1" />
+                      Previous
+                    </button>
+
+                    <button
+                      disabled={paymentPage >= paymentTotalPages || paymentsLoading}
+                      onClick={() => setPaymentPage((prev) => Math.min(paymentTotalPages, prev + 1))}
+                      className="px-3 py-1.5 rounded-lg border border-appBorder text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Next
+                      <ChevronRight className="w-3.5 h-3.5 inline ml-1" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </main>
 
       {/* Inquiry Details Modal */}
@@ -645,6 +927,152 @@ export const AdminDashboardPage = () => {
                 className="px-6 py-2.5 rounded-xl bg-navy-900 hover:bg-navy-800 text-white text-xs sm:text-sm font-bold shadow-md transition-all flex items-center justify-center gap-2"
               >
                 {updatingInquiry ? 'Saving Changes...' : 'Save Updates'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Transaction Details Modal */}
+      {selectedPayment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/70 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl relative border border-appBorder max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setSelectedPayment(null)}
+              className="absolute top-5 right-5 p-2 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-xl bg-navy-900 text-white flex items-center justify-center font-bold">
+                <Receipt className="w-5 h-5 text-americanRed" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs font-bold text-navy-900">
+                    {selectedPayment.orderId}
+                  </span>
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase ${
+                      paymentStatusColors[selectedPayment.paymentStatus] || 'bg-slate-100 text-slate-700'
+                    }`}
+                  >
+                    {selectedPayment.paymentStatus}
+                  </span>
+                </div>
+                <h3 className="text-xl font-bold font-heading text-navy-900 mt-0.5">
+                  Cashfree Payment Record
+                </h3>
+              </div>
+            </div>
+
+            {/* Failure Alert Banner if any */}
+            {selectedPayment.failureReason && (
+              <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <div>
+                  <strong className="block font-bold">Gateway Failure Details:</strong>
+                  <span>{selectedPayment.failureReason}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Information Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200/80 mb-6 text-xs sm:text-sm">
+              <div>
+                <span className="text-slate-500 block text-xs">Customer Name:</span>
+                <span className="font-bold text-navy-900 text-base">{selectedPayment.customerName}</span>
+              </div>
+
+              <div>
+                <span className="text-slate-500 block text-xs">Total Amount:</span>
+                <span className="font-extrabold text-navy-900 text-lg font-heading">
+                  {selectedPayment.currency} {selectedPayment.amount?.toFixed?.(2) || selectedPayment.amount}
+                </span>
+              </div>
+
+              <div>
+                <span className="text-slate-500 block text-xs">Email Address:</span>
+                <a
+                  href={`mailto:${selectedPayment.customerEmail}`}
+                  className="font-medium text-navy-900 hover:underline"
+                >
+                  {selectedPayment.customerEmail}
+                </a>
+              </div>
+
+              <div>
+                <span className="text-slate-500 block text-xs">Mobile Phone:</span>
+                <a
+                  href={`tel:${selectedPayment.customerPhone}`}
+                  className="font-medium text-navy-900 hover:underline"
+                >
+                  {selectedPayment.customerPhone}
+                </a>
+              </div>
+
+              <div>
+                <span className="text-slate-500 block text-xs">Selected Plan / Service:</span>
+                <span className="font-bold text-americanRed">{selectedPayment.serviceName}</span>
+              </div>
+
+              <div>
+                <span className="text-slate-500 block text-xs">Payment Method:</span>
+                <span className="font-semibold text-slate-800 capitalize">
+                  {selectedPayment.paymentMethod || '—'}
+                </span>
+              </div>
+
+              {selectedPayment.cashfreePaymentId && (
+                <div>
+                  <span className="text-slate-500 block text-xs">Cashfree Payment ID:</span>
+                  <span className="font-mono text-slate-700">{selectedPayment.cashfreePaymentId}</span>
+                </div>
+              )}
+
+              {selectedPayment.cashfreeOrderId && (
+                <div>
+                  <span className="text-slate-500 block text-xs">Cashfree Order ID:</span>
+                  <span className="font-mono text-slate-700">{selectedPayment.cashfreeOrderId}</span>
+                </div>
+              )}
+
+              <div>
+                <span className="text-slate-500 block text-xs">Created At:</span>
+                <span className="text-slate-600">
+                  {new Date(selectedPayment.createdAt).toLocaleString()}
+                </span>
+              </div>
+
+              <div>
+                <span className="text-slate-500 block text-xs">Last Updated:</span>
+                <span className="text-slate-600">
+                  {new Date(selectedPayment.updatedAt).toLocaleString()}
+                </span>
+              </div>
+            </div>
+
+            {/* Gateway Technical Data */}
+            {selectedPayment.rawCashfreeResponse && (
+              <div className="mb-6">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-navy-900 mb-2">
+                  Gateway Audit Snapshot:
+                </h4>
+                <div className="max-h-48 overflow-y-auto p-3 rounded-xl bg-slate-900 text-slate-200 font-mono text-[11px] leading-relaxed border border-slate-800">
+                  <pre>{JSON.stringify(selectedPayment.rawCashfreeResponse, null, 2)}</pre>
+                </div>
+              </div>
+            )}
+
+            {/* Modal Actions */}
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setSelectedPayment(null)}
+                className="px-6 py-2.5 rounded-xl bg-navy-900 hover:bg-navy-800 text-white text-xs sm:text-sm font-bold shadow-md transition-all"
+              >
+                Close Record
               </button>
             </div>
           </div>

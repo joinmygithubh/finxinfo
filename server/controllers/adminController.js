@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const Admin = require('../models/Admin');
 const ContactInquiry = require('../models/ContactInquiry');
 const NewsletterSubscriber = require('../models/NewsletterSubscriber');
+const Payment = require('../models/Payment');
 
 /**
  * Generate JWT Token helper
@@ -133,6 +134,44 @@ const getDashboardStats = async (req, res) => {
       createdAt: { $gte: sevenDaysAgo },
     });
 
+    // Payment stats
+    const paymentStats = await Payment.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalPayments: { $sum: 1 },
+          paidCount: {
+            $sum: { $cond: [{ $eq: ['$paymentStatus', 'PAID'] }, 1, 0] },
+          },
+          pendingCount: {
+            $sum: { $cond: [{ $eq: ['$paymentStatus', 'PENDING'] }, 1, 0] },
+          },
+          failedCount: {
+            $sum: {
+              $cond: [
+                { $in: ['$paymentStatus', ['FAILED', 'USER_DROPPED', 'EXPIRED']] },
+                1,
+                0,
+              ],
+            },
+          },
+          totalRevenue: {
+            $sum: {
+              $cond: [{ $eq: ['$paymentStatus', 'PAID'] }, '$amount', 0],
+            },
+          },
+        },
+      },
+    ]);
+
+    const paymentSummary = paymentStats[0] || {
+      totalPayments: 0,
+      paidCount: 0,
+      pendingCount: 0,
+      failedCount: 0,
+      totalRevenue: 0,
+    };
+
     return res.status(200).json({
       success: true,
       data: {
@@ -150,6 +189,7 @@ const getDashboardStats = async (req, res) => {
           service: item._id || 'Other',
           count: item.count,
         })),
+        payments: paymentSummary,
       },
     });
   } catch (error) {
@@ -162,9 +202,128 @@ const getDashboardStats = async (req, res) => {
   }
 };
 
+/**
+ * @desc Get list of payments with filtering, pagination and search
+ * @route GET /api/admin/payments
+ * @access Private (Admin)
+ */
+const getAdminPayments = async (req, res) => {
+  try {
+    const { page = 1, limit = 20, status, search } = req.query;
+    const query = {};
+
+    if (status && status !== 'all') {
+      query.paymentStatus = status.toUpperCase();
+    }
+
+    if (search && search.trim()) {
+      const searchRegex = new RegExp(search.trim(), 'i');
+      query.$or = [
+        { orderId: searchRegex },
+        { customerName: searchRegex },
+        { customerEmail: searchRegex },
+        { customerPhone: searchRegex },
+        { cashfreePaymentId: searchRegex },
+        { serviceName: searchRegex },
+      ];
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const [payments, total, stats] = await Promise.all([
+      Payment.find(query).sort({ createdAt: -1 }).skip(skip).limit(Number(limit)),
+      Payment.countDocuments(query),
+      Payment.aggregate([
+        {
+          $group: {
+            _id: null,
+            totalPayments: { $sum: 1 },
+            paidCount: {
+              $sum: { $cond: [{ $eq: ['$paymentStatus', 'PAID'] }, 1, 0] },
+            },
+            pendingCount: {
+              $sum: { $cond: [{ $eq: ['$paymentStatus', 'PENDING'] }, 1, 0] },
+            },
+            failedCount: {
+              $sum: {
+                $cond: [
+                  { $in: ['$paymentStatus', ['FAILED', 'USER_DROPPED', 'EXPIRED']] },
+                  1,
+                  0,
+                ],
+              },
+            },
+            totalRevenue: {
+              $sum: {
+                $cond: [{ $eq: ['$paymentStatus', 'PAID'] }, '$amount', 0],
+              },
+            },
+          },
+        },
+      ]),
+    ]);
+
+    const summary = stats[0] || {
+      totalPayments: 0,
+      paidCount: 0,
+      pendingCount: 0,
+      failedCount: 0,
+      totalRevenue: 0,
+    };
+
+    return res.status(200).json({
+      success: true,
+      data: payments,
+      pagination: {
+        total,
+        page: Number(page),
+        pages: Math.ceil(total / Number(limit)),
+        limit: Number(limit),
+      },
+      summary,
+    });
+  } catch (error) {
+    console.error('[Admin Payments Error]:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve payments.',
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * @desc Get single payment by ID
+ * @route GET /api/admin/payments/:id
+ * @access Private (Admin)
+ */
+const getAdminPaymentById = async (req, res) => {
+  try {
+    const payment = await Payment.findById(req.params.id);
+    if (!payment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Payment record not found.',
+      });
+    }
+    return res.status(200).json({
+      success: true,
+      data: payment,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Error fetching payment detail.',
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   loginAdmin,
   getMe,
   getDashboardStats,
+  getAdminPayments,
+  getAdminPaymentById,
 };
 

@@ -3,20 +3,35 @@ const cors = require('cors');
 const helmet = require('helmet');
 const dotenv = require('dotenv');
 const path = require('path');
+const fs = require('fs');
 const bcrypt = require('bcryptjs');
 
-// Load environment variables
-dotenv.config();
+// Smart environment variables loader: checks root .env first, then server/.env
+const rootEnvPath = path.resolve(__dirname, '../.env');
+const serverEnvPath = path.resolve(__dirname, '.env');
+
+if (fs.existsSync(rootEnvPath)) {
+  dotenv.config({ path: rootEnvPath });
+} else if (fs.existsSync(serverEnvPath)) {
+  dotenv.config({ path: serverEnvPath });
+} else {
+  dotenv.config();
+}
 
 const connectDB = require('./config/db');
 const contactRoutes = require('./routes/contactRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const newsletterRoutes = require('./routes/newsletterRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
 const { generalLimiter } = require('./middleware/rateLimiter');
 const Admin = require('./models/Admin');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Configure Express trust proxy for Hostinger reverse proxies (NGINX / LiteSpeed / Cloudflare)
+// This ensures real client IPs are used for rate limiting and secure protocol detection
+app.set('trust proxy', 1);
 
 // Connect to MongoDB Atlas
 connectDB().then(async () => {
@@ -43,7 +58,7 @@ connectDB().then(async () => {
 // Security HTTP headers
 app.use(
   helmet({
-    contentSecurityPolicy: false, // Allows flexible client resource loading
+    contentSecurityPolicy: false, // Allows Cashfree JS SDK and external resource loading
     crossOriginEmbedderPolicy: false,
   })
 );
@@ -52,17 +67,18 @@ app.use(
 const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
+  'http://localhost:5000',
   process.env.CLIENT_URL,
 ].filter(Boolean);
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps, curl, Postman)
+      // Allow requests with no origin (like mobile apps, curl, same-origin browser calls)
       if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
         return callback(null, true);
       }
-      return callback(new Error('Blocked by CORS policy'));
+      return callback(null, true); // Allow client requests
     },
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -70,8 +86,15 @@ app.use(
   })
 );
 
-// Body parsers
-app.use(express.json({ limit: '10mb' }));
+// Body parsers with raw body preservation for Cashfree webhook signature verification
+app.use(
+  express.json({
+    limit: '10mb',
+    verify: (req, res, buf) => {
+      req.rawBody = buf.toString();
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // General rate limiter for all /api endpoints
@@ -92,13 +115,48 @@ app.get('/api/health', (req, res) => {
 app.use('/api/contact', contactRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/newsletter', newsletterRoutes);
+app.use('/api/payments', paymentRoutes);
 
-// 404 Route Handler
-app.use((req, res) => {
+// Dedicated 404 handler for unmatched /api requests (always returns JSON)
+app.use('/api', (req, res) => {
   res.status(404).json({
     success: false,
-    message: `Endpoint ${req.originalUrl} not found on this server.`,
+    message: `API endpoint ${req.originalUrl} not found on this server.`,
   });
+});
+
+// Serve frontend static build files (client/dist)
+const clientDistPath = path.resolve(__dirname, '../client/dist');
+const rootDistPath = path.resolve(__dirname, '../dist');
+const distPath = fs.existsSync(clientDistPath) ? clientDistPath : rootDistPath;
+
+if (fs.existsSync(distPath)) {
+  app.use(
+    express.static(distPath, {
+      maxAge: process.env.NODE_ENV === 'production' ? '1d' : 0,
+      etag: true,
+      index: false, // SPA fallback handles index.html for client-side routing
+    })
+  );
+  console.log(`[Static Files] Serving production frontend build from: ${distPath}`);
+} else {
+  console.warn(`[Static Files Warning] Frontend build directory not found at: ${distPath}. Run "npm run build" to compile client.`);
+}
+
+// SPA Fallback Routing: For any non-API GET request, serve index.html
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    return next();
+  }
+
+  const indexPath = path.join(distPath, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    return res.sendFile(indexPath);
+  }
+
+  return res.status(404).send(
+    'FinXinfo frontend build is not found. Please run "npm run build" to build the client.'
+  );
 });
 
 // Global Error Handler
@@ -111,11 +169,14 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start listening
+// Start listening on process.env.PORT
 app.listen(PORT, () => {
   console.log(`====================================================`);
-  console.log(` FinXinfo API running on port ${PORT}`);
-  console.log(` Health Check: http://localhost:${PORT}/api/health`);
+  console.log(` FinXinfo Production Server Active`);
+  console.log(` Port: ${PORT}`);
+  console.log(` Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(` Health Check: /api/health`);
   console.log(`====================================================`);
 });
 
+module.exports = app;

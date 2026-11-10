@@ -90,7 +90,7 @@ const sendAdminNotification = async (inquiry) => {
           </div>
 
           <div style="margin-top: 28px; text-align: center;">
-            <a href="${process.env.CLIENT_URL || 'http://localhost:5173'}/admin/inquiries" style="display: inline-block; background-color: #0A2342; color: #FFFFFF; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-size: 14px; font-weight: bold;">Review In Admin Dashboard</a>
+            <a href="${(process.env.CLIENT_URL || '').replace(/\/+$/, '') || 'https://finxinfo.com'}/admin/inquiries" style="display: inline-block; background-color: #0A2342; color: #FFFFFF; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-size: 14px; font-weight: bold;">Review In Admin Dashboard</a>
           </div>
         </div>
         <div style="background-color: #F8FAFC; padding: 16px; text-align: center; font-size: 12px; color: #94A3B8; border-top: 1px solid #E2E8F0;">

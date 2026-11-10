@@ -158,7 +158,7 @@ export const Navbar = () => {
           >
             <div className="px-5 pt-3 pb-6 space-y-2">
               <div className="pb-3 mb-2 border-b border-slate-100 flex items-center justify-between sm:hidden">
-                <BrandLogo variant="dark" showText={true} />
+                <BrandLogo variant="dark" showText={true} onClick={() => setMobileMenuOpen(false)} />
                 <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Navigation</span>
               </div>
               {navLinks.map((link) => (

@@ -6,6 +6,8 @@ const {
   loginAdmin,
   getMe,
   getDashboardStats,
+  getAdminPayments,
+  getAdminPaymentById,
 } = require('../controllers/adminController');
 const {
   getInquiries,
@@ -28,6 +30,8 @@ router.get('/inquiries/:id', getInquiryById);
 router.patch('/inquiries/:id', updateInquiryStatus);
 router.delete('/inquiries/:id', deleteInquiry);
 router.get('/subscribers', getSubscribers);
+router.get('/payments', getAdminPayments);
+router.get('/payments/:id', getAdminPaymentById);
 
 module.exports = router;
 
