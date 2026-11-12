@@ -12,6 +12,8 @@ const generalLimiter = rateLimit({
   },
 });
 
+
+
 // Stricter rate limiter for contact form submissions
 const contactLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
